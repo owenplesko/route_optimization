@@ -115,7 +115,7 @@ def simulated_annealing(locations, route_length, num_iterations=1000000, initial
     return best_route
 
 def formatRoute(locations, route, route_length):
-    json_data = [{"x": int(locations[route[i]][0] + 192), "y": int(locations[route[i]][2] + 30), "z": int(locations[route[i]][1] + 192), "options": {"name": i+1}} for i in range(route_length)]
+    json_data = [{"x": int(locations[route[i]][0] + 192), "y": int(locations[route[i]][2] + 30), "z": int(locations[route[i]][1] + 192), "r": 0, "g": 0, "b" : 1, "options": {"name": i+1}} for i in range(route_length)]
     return json_data
 
 if __name__ == "__main__":
