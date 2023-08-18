@@ -76,8 +76,8 @@ def distance(loc1, loc2):
 @njit
 def rate_route(locations, route, routeLength):
     DISTANCE_PER_HOUR = 2500
-    RUNS_PER_HOUR = 6
-    GOAL_DENSITY = 2000
+    RUNS_PER_HOUR = 12
+    GOAL_DENSITY = 3000
     
     total_distance = 0
     for i in range(1, routeLength):
@@ -141,7 +141,7 @@ def format_route(locations, route, route_length):
     return json_data
 
 if __name__ == "__main__":
-    locations = get_locations(0, 0, 8, 8, threshold=40)
+    locations = get_locations(0, 32, 8, 40, threshold=40)
     
     route_length = 150
     route, _ = simulated_annealing(locations, route_length)
