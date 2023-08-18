@@ -4,8 +4,6 @@ import random
 import math
 import json
 
-
-
 world_map = np.load("world_arr.npy")
 weight_map = np.load("weight_map.npy")
 
@@ -95,24 +93,24 @@ def rate_route(locations, route, routeLength):
     return (setup_hours + mining_hours) * 1000
 
 @njit
-def acceptance_probability(old_energy, new_energy, temperature):
-    delta = old_energy - new_energy
-    if delta > 0:
+def acceptance_probability(old_rating, new_rating, temperature):
+    delta_rating = old_rating - new_rating
+    if delta_rating > 0:
         return 1.0
-    exponent = delta / temperature
-    p = math.exp(exponent)
-    return p
+    exponent = delta_rating / temperature
+    prob = math.exp(exponent)
+    return prob
 
 @njit
 def get_linear_temperature(start_temp, end_temp, total_iterations, current_iterations):
     return start_temp - (start_temp - end_temp) * (current_iterations / total_iterations)
 
 @njit
-def simulated_annealing(locations, route_length, num_iterations=10000000, start_temperature=10.0, end_temperature=0.00001):
+def generate_route(locations, route_length, num_iterations=10000000, start_temperature=10.0, end_temperature=0.00001):
     current_route = random_route(len(locations))
     best_route = list(current_route)
-    current_energy = rate_route(locations, current_route, route_length)
-    best_energy = current_energy
+    current_rating = rate_route(locations, current_route, route_length)
+    best_rating = current_rating
 
     for iteration in range(num_iterations):
         temperature = get_linear_temperature(start_temp=start_temperature, end_temp=end_temperature, total_iterations=num_iterations, current_iterations=iteration)
@@ -124,17 +122,17 @@ def simulated_annealing(locations, route_length, num_iterations=10000000, start_
             index2 = random.randint(0, len(locations) - 1)
         current_route[index1], current_route[index2] = current_route[index2], current_route[index1]
 
-        new_energy = rate_route(locations, current_route, route_length)
-        if acceptance_probability(current_energy, new_energy, temperature) > random.random():
-            current_energy = new_energy
+        new_rating = rate_route(locations, current_route, route_length)
+        if acceptance_probability(current_rating, new_rating, temperature) > random.random():
+            current_rating = new_rating
         else:
             current_route[index1], current_route[index2] = current_route[index2], current_route[index1]
 
-        if current_energy < best_energy:
+        if current_rating < best_rating:
             best_route = list(current_route)
-            best_energy = current_energy
+            best_rating = current_rating
 
-    return best_route, best_energy
+    return best_route, best_rating
 
 def format_route(locations, route, route_length):
     json_data = [{"x": int(locations[route[i]][0] + 192), "y": int(locations[route[i]][2] + 30), "z": int(locations[route[i]][1] + 192), "r": 0, "g": 0, "b" : 1, "options": {"name": i+1}} for i in range(route_length)]
@@ -144,7 +142,7 @@ if __name__ == "__main__":
     locations = get_locations(0, 32, 8, 40, threshold=40)
     
     route_length = 150
-    route, _ = simulated_annealing(locations, route_length)
+    route, _ = generate_route(locations, route_length)
     
     json_route = format_route(locations, route, route_length)
     with open("route.txt", 'w') as f:
