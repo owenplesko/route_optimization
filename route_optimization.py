@@ -1,13 +1,15 @@
 import numpy as np
+from numba import njit
 import random
 import math
 import json
-from tqdm import tqdm
+
+
 
 world_map = np.load("world_arr.npy")
 weight_map = np.load("weight_map.npy")
 
-def getLocations(chunkX1, chunkZ1, chunkX2, chunkZ2, threshold=45):
+def get_locations(chunkX1, chunkZ1, chunkX2, chunkZ2, threshold=45):
     # dont get any wp locations on border of 8 x 8 chunk area as some gemstones will not be loaded
     x1 = (chunkX1 * 16) + 1
     z1 = (chunkZ1 * 16) + 1
@@ -43,7 +45,7 @@ def getLocations(chunkX1, chunkZ1, chunkX2, chunkZ2, threshold=45):
             continue
         
         # else add location to locations
-        locations.append(potential_locations[0])
+        locations.append(np.asarray(potential_locations[0]))
         potential_locations = potential_locations[1:]
         
         # remove gemstones used by location in world copy
@@ -53,9 +55,10 @@ def getLocations(chunkX1, chunkZ1, chunkX2, chunkZ2, threshold=45):
             for yShift in range(1, 5):
                 for zShift in range(-1, 2):
                     world_copy[x + xShift, z + zShift, y + yShift] = 0
-    return locations
+    return np.asarray(locations)
 
-def randomRoute(numLocations):
+@njit
+def random_route(numLocations):
     route = []
     for i in range(numLocations):
         route.append(i)
@@ -66,33 +69,53 @@ def randomRoute(numLocations):
         route[randomIndex] = temp
     return route
 
+@njit
 def distance(loc1, loc2):
     return math.sqrt((loc1[0] - loc2[0])**2 + (loc1[2] - loc2[2])**2 + (loc1[1] - loc2[1])**2)
 
-def rateRoute(locations, route, routeLength):
+@njit
+def rate_route(locations, route, routeLength):
+    DISTANCE_PER_HOUR = 2500
+    RUNS_PER_HOUR = 6
+    GOAL_DENSITY = 2000
+    
     total_distance = 0
     for i in range(1, routeLength):
         total_distance += distance(locations[route[i-1]], locations[route[i]])
     total_distance += distance(locations[route[0]], locations[route[routeLength - 1]])
-    return total_distance
+    
+    total_density = 0
+    for i in range(routeLength):
+        total_density += locations[route[i], 3]
+    average_density = total_density / routeLength
+    
+    setup_hours = total_distance / DISTANCE_PER_HOUR
+    mining_hours = GOAL_DENSITY / (average_density * RUNS_PER_HOUR)
+    
+    return (setup_hours + mining_hours) * 1000
 
+@njit
 def acceptance_probability(old_energy, new_energy, temperature):
     delta = old_energy - new_energy
     if delta > 0:
         return 1.0
     exponent = delta / temperature
-    capped_exponent = min(max(exponent, -1000), 1000)  # Cap the exponent cause i was getting overflows :(
-    p = math.exp(capped_exponent)
+    p = math.exp(exponent)
     return p
 
-def simulated_annealing(locations, route_length, num_iterations=1000000, initial_temperature=10.0, cooling_rate=0.0000025):
-    current_route = randomRoute(len(locations))
+@njit
+def get_linear_temperature(start_temp, end_temp, total_iterations, current_iterations):
+    return start_temp - (start_temp - end_temp) * (current_iterations / total_iterations)
+
+@njit
+def simulated_annealing(locations, route_length, num_iterations=10000000, start_temperature=10.0, end_temperature=0.00001):
+    current_route = random_route(len(locations))
     best_route = list(current_route)
-    current_energy = rateRoute(locations, current_route, route_length)
+    current_energy = rate_route(locations, current_route, route_length)
     best_energy = current_energy
 
-    for iteration in tqdm(range(num_iterations)):
-        temperature = initial_temperature * math.exp(-cooling_rate * iteration)
+    for iteration in range(num_iterations):
+        temperature = get_linear_temperature(start_temp=start_temperature, end_temp=end_temperature, total_iterations=num_iterations, current_iterations=iteration)
 
         # Create a neighboring solution by swapping two random locations in the route
         index1 = random.randint(0, route_length - 1)
@@ -101,26 +124,28 @@ def simulated_annealing(locations, route_length, num_iterations=1000000, initial
             index2 = random.randint(0, len(locations) - 1)
         current_route[index1], current_route[index2] = current_route[index2], current_route[index1]
 
-        new_energy = rateRoute(locations, current_route, route_length)
+        new_energy = rate_route(locations, current_route, route_length)
         if acceptance_probability(current_energy, new_energy, temperature) > random.random():
             current_energy = new_energy
         else:
             current_route[index1], current_route[index2] = current_route[index2], current_route[index1]
 
         if current_energy < best_energy:
-            print(f"new best: {current_energy}")
             best_route = list(current_route)
             best_energy = current_energy
 
-    return best_route
+    return best_route, best_energy
 
-def formatRoute(locations, route, route_length):
+def format_route(locations, route, route_length):
     json_data = [{"x": int(locations[route[i]][0] + 192), "y": int(locations[route[i]][2] + 30), "z": int(locations[route[i]][1] + 192), "r": 0, "g": 0, "b" : 1, "options": {"name": i+1}} for i in range(route_length)]
     return json_data
 
 if __name__ == "__main__":
-    locations = getLocations(0, 0, 8, 8, threshold=40)
-    route = simulated_annealing(locations, route_length=150)
-    json_route = formatRoute(locations, route, 150)
+    locations = get_locations(0, 0, 8, 8, threshold=40)
+    
+    route_length = 150
+    route, _ = simulated_annealing(locations, route_length)
+    
+    json_route = format_route(locations, route, route_length)
     with open("route.txt", 'w') as f:
         json.dump(json_route, f)
