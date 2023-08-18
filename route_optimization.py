@@ -77,7 +77,7 @@ def distance(loc1, loc2):
 def rate_route(locations, route, routeLength):
     DISTANCE_PER_HOUR = 2500
     RUNS_PER_HOUR = 12
-    GOAL_DENSITY = 3000
+    GOAL_DENSITY = 2000
     
     total_distance = 0
     for i in range(1, routeLength):
